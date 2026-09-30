@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {ISingleReleaseEscrow} from "./ISingleReleaseEscrow.sol";
+import {IMultiReleaseEscrow} from "./IMultiReleaseEscrow.sol";
 
-interface ISingleReleaseEscrowFactory {
+interface IMultiReleaseEscrowFactory {
     struct AddressBalance {
         address escrow;
         uint256 balance;
@@ -22,7 +22,7 @@ interface ISingleReleaseEscrowFactory {
 
     function trustlessWorkFeeRecipient() external view returns (address);
 
-    function createEscrow(bytes32 salt, ISingleReleaseEscrow.Escrow calldata escrowProperties)
+    function createEscrow(bytes32 salt, IMultiReleaseEscrow.Escrow calldata escrowProperties)
         external
         returns (address escrow);
 

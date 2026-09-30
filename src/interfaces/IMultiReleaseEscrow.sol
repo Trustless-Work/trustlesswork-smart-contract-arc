@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-/// @notice Types, errors and events of the single-release escrow, ported from
-/// the Soroban v2 contract (trustlesswork-smart-contract-stellar, `contracts/escrow/src`). Names follow the Rust
-/// originals in camelCase; `Option<T>` fields become a `set*` flag + value.
-interface ISingleReleaseEscrow {
+/// @notice Types, errors and events of the multi-release escrow, ported from
+/// the Soroban v2 contract (`contracts/escrow/src`, branch
+/// `multi-release-develop-v2`). Each milestone is a mini-escrow with its own
+/// amount, receiver, dispute and release flag. Names follow the Rust originals
+/// in camelCase; `Option<T>` fields become a `set*` flag + value.
+interface IMultiReleaseEscrow {
     ////////////////////////
     // Types /////
     ////////////////////////
@@ -15,41 +17,43 @@ interface ISingleReleaseEscrow {
         address[] approvedBy;
     }
 
-    struct Milestone {
-        string description;
-        string status;
-        string evidence;
-        MilestoneApprovals approvals;
-    }
-
-    struct Roles {
-        address[] approvers;
-        address[] serviceProviders;
-        address platform;
-        address[] releaseSigners;
-        address[] disputeResolvers;
-        address receiver;
-        address admin;
-        address[] observers;
-    }
-
     struct Dispute {
         bool isDisputed;
         string reason;
         bool resolved;
     }
 
-    /// @dev `token` replaces Soroban's `trustline.address`.
+    struct Milestone {
+        string description;
+        string status;
+        string evidence;
+        MilestoneApprovals approvals;
+        uint256 amount;
+        Dispute dispute;
+        bool released;
+        address receiver;
+    }
+
+    /// @dev No `receiver`: each milestone names its own.
+    struct Roles {
+        address[] approvers;
+        address[] serviceProviders;
+        address platform;
+        address[] releaseSigners;
+        address[] disputeResolvers;
+        address admin;
+        address[] observers;
+    }
+
+    /// @dev `token` replaces Soroban's `trustline.address`. There is no
+    /// escrow-level amount: the total is the sum of the milestone amounts.
     struct Escrow {
         string engagementId;
         string title;
         Roles roles;
         string description;
-        uint256 amount;
         uint32 platformFee;
         Milestone[] milestones;
-        Dispute dispute;
-        bool released;
         address token;
         uint32 receiverMemo;
     }
@@ -65,6 +69,8 @@ interface ISingleReleaseEscrow {
         uint32 index;
         bool setDescription;
         string newDescription;
+        bool setAmount;
+        uint256 newAmount;
     }
 
     /// @dev `evidenceHash` is zero when the update left the evidence untouched.
@@ -79,31 +85,41 @@ interface ISingleReleaseEscrow {
         bool engagementId;
         bool title;
         bool description;
-        bool amount;
         bool platformFee;
         bool roles;
         bool token;
         bool receiverMemo;
-        uint256 oldAmount;
-        uint256 newAmount;
         uint32 oldPlatformFee;
         uint32 newPlatformFee;
     }
 
     struct MilestoneAddedEntry {
         uint32 index;
+        uint256 amount;
         bytes32 descriptionHash;
     }
 
-    /// @dev `newDescriptionHash` is zero when the description did not change.
+    /// @dev Soroban's `Option<i128>`/`Option<BytesN<32>>`: `amountChanged`
+    /// flags `newAmount`, and `newDescriptionHash` is zero when unchanged.
     struct MilestoneUpdatedEntry {
         uint32 index;
+        bool amountChanged;
+        uint256 newAmount;
         bytes32 newDescriptionHash;
     }
 
     struct DistributionEntry {
         address recipient;
         uint256 amount;
+    }
+
+    struct MilestonePayout {
+        uint32 index;
+        address receiver;
+        uint256 amount;
+        uint256 platformFee;
+        uint256 trustlessWorkFee;
+        uint256 netAmount;
     }
 
     struct FeeResult {
@@ -121,7 +137,6 @@ interface ISingleReleaseEscrow {
     error EscrowNotFound();
     error EscrowAlreadyReleased();
     error EscrowAlreadyResolved();
-    error EscrowAlreadyInDispute();
     error EscrowNotInDispute();
     error EscrowOpenedForDisputeResolution();
     error EscrowNotCompleted();
@@ -131,7 +146,6 @@ interface ISingleReleaseEscrow {
     error AmountCannotBeZero();
     error PlatformFeeTooHigh();
     error InsufficientFundsForEscrowFunding();
-    error TooManyEscrowsRequested();
     error InsufficientFundsForResolution();
     error DistributionsMustEqualEscrowBalance();
     error AmountsToBeTransferredShouldBePositive();
@@ -153,7 +167,11 @@ interface ISingleReleaseEscrow {
     error TooManyMilestones();
     error TargetCannotBeZero();
     error PlatformAddressCannotBeChanged();
+    error ReleaseMilestonesEmpty();
+    error MilestoneAlreadyReleased();
     error InvalidMilestoneIndex();
+    error BatchMilestoneDisputeEmpty();
+    error MilestoneAlreadyDisputed();
     error RoleLimitExceeded();
     error DuplicateAddressInRole();
     error DisputeResolverOverlapsWithOtherRole();
@@ -162,7 +180,9 @@ interface ISingleReleaseEscrow {
     error StringTooLong();
     error SignerMustBeApproverAndReleaseSigner();
 
-    // MilestoneError (names shared with EscrowError are declared once above)
+    // ReleaseError / MilestoneError (names shared with EscrowError are declared once above)
+    error DuplicateMilestoneIndex();
+    error BatchTooLarge();
     error MilestoneHasAlreadyBeenApproved();
     error ApproverAlreadyApprovedMilestone();
     error EmptyMilestoneStatus();
@@ -172,8 +192,7 @@ interface ISingleReleaseEscrow {
     error BatchMilestoneApproveEmpty();
     error OnlyServiceProviderCanChangeMilestoneStatus();
     error UnauthorizedApprover();
-    error DuplicateMilestoneIndex();
-    error BatchTooLarge();
+    error MilestoneAlreadyResolved();
 
     // EVM-only
     error OnlyFactory();
@@ -185,28 +204,21 @@ interface ISingleReleaseEscrow {
     // Events /////
     ////////////////////////
 
-    event EscrowInitialized(
-        string indexed engagementId, uint256 amount, uint32 platformFee, address token, address receiver
-    );
+    event EscrowInitialized(string indexed engagementId, uint32 milestoneCount, uint256 totalAmount);
     event EscrowFunded(string indexed engagementId, address indexed funder, uint256 amount, uint256 fundedTotal);
-    event FundsReleased(
-        string indexed engagementId,
-        address indexed releaseSigner,
-        address indexed receiver,
-        uint256 amount,
-        uint256 platformFee,
-        uint256 trustlessWorkFee,
-        uint256 netAmount
-    );
+    event FundsReleased(string indexed engagementId, address indexed releaseSigner, MilestonePayout[] payouts);
     event EscrowUpdated(string indexed engagementId, address indexed admin, EscrowPropertyChanges changes);
     event MilestoneStatusChanged(
         string indexed engagementId, address indexed serviceProvider, MilestoneStatusEntry[] updates
     );
     event MilestonesApproved(string indexed engagementId, address indexed approver, uint32[] milestoneIndices);
-    event EscrowDisputed(string indexed engagementId, address indexed signer, string reason);
+    event MilestonesDisputed(
+        string indexed engagementId, address indexed signer, string reason, uint32[] milestoneIndices
+    );
     event DisputeResolved(
         string indexed engagementId,
         address indexed disputeResolver,
+        uint32[] milestoneIndices,
         uint256 platformFee,
         uint256 trustlessWorkFee,
         DistributionEntry[] distributions
@@ -244,7 +256,7 @@ interface ISingleReleaseEscrow {
         bytes32 s
     ) external;
 
-    function releaseFunds() external;
+    function releaseFunds(uint32[] calldata milestoneIndices) external;
 
     function updateEscrow(Escrow calldata escrowProperties) external;
 
@@ -256,9 +268,13 @@ interface ISingleReleaseEscrow {
 
     function approveAndReleaseMilestones(uint32[] calldata milestoneIndices) external;
 
-    function disputeEscrow(string calldata reason) external;
+    function disputeMilestones(uint32[] calldata milestoneIndices, string calldata reason) external;
 
-    function resolveDispute(address[] calldata recipients, uint256[] calldata amounts) external;
+    function resolveDispute(
+        uint32[] calldata milestoneIndices,
+        address[] calldata recipients,
+        uint256[] calldata amounts
+    ) external;
 
     function withdrawRemainingFunds(address[] calldata recipients, uint256[] calldata amounts) external;
 

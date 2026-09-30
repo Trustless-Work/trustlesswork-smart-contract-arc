@@ -2,218 +2,270 @@
 pragma solidity ^0.8.28;
 
 import {BaseTest} from "./utils/Base.t.sol";
-import {ISingleReleaseEscrow} from "../src/interfaces/ISingleReleaseEscrow.sol";
-import {SingleReleaseEscrow} from "../src/SingleReleaseEscrow.sol";
+import {IMultiReleaseEscrow} from "../src/interfaces/IMultiReleaseEscrow.sol";
+import {MultiReleaseEscrow} from "../src/MultiReleaseEscrow.sol";
 
 contract MilestoneTest is BaseTest {
     function _status(uint32 index, string memory status, bool setEvidence, string memory evidence)
         internal
         pure
-        returns (ISingleReleaseEscrow.MilestoneStatusUpdate[] memory u)
+        returns (IMultiReleaseEscrow.MilestoneStatusUpdate[] memory u)
     {
-        u = new ISingleReleaseEscrow.MilestoneStatusUpdate[](1);
-        u[0] = ISingleReleaseEscrow.MilestoneStatusUpdate({
+        u = new IMultiReleaseEscrow.MilestoneStatusUpdate[](1);
+        u[0] = IMultiReleaseEscrow.MilestoneStatusUpdate({
             milestoneIndex: index, newStatus: status, setEvidence: setEvidence, newEvidence: evidence
         });
     }
 
-    function test_change_milestone_status_emits_evidence_hash() public {
-        SingleReleaseEscrow escrow = _defaultEscrow();
+    function _noMilestones() internal pure returns (IMultiReleaseEscrow.Milestone[] memory) {
+        return new IMultiReleaseEscrow.Milestone[](0);
+    }
 
-        ISingleReleaseEscrow.MilestoneStatusEntry[] memory entries = new ISingleReleaseEscrow.MilestoneStatusEntry[](1);
-        entries[0] = ISingleReleaseEscrow.MilestoneStatusEntry({
-            index: 1, status: "Done", evidenceHash: sha256(bytes("ipfs://proof"))
-        });
+    function _noUpdates() internal pure returns (IMultiReleaseEscrow.MilestoneUpdate[] memory) {
+        return new IMultiReleaseEscrow.MilestoneUpdate[](0);
+    }
+
+    function _newMilestone(string memory d, uint256 amount, address to)
+        internal
+        pure
+        returns (IMultiReleaseEscrow.Milestone[] memory add)
+    {
+        add = new IMultiReleaseEscrow.Milestone[](1);
+        add[0] = _milestone(d, amount, to);
+    }
+
+    function test_change_milestone_status_emits_evidence_hash() public {
+        MultiReleaseEscrow escrow = _defaultEscrow();
+
+        IMultiReleaseEscrow.MilestoneStatusEntry[] memory entries = new IMultiReleaseEscrow.MilestoneStatusEntry[](1);
+        entries[0] =
+            IMultiReleaseEscrow.MilestoneStatusEntry({index: 1, status: "Done", evidenceHash: sha256("ipfs://proof")});
         vm.expectEmit(address(escrow));
-        emit ISingleReleaseEscrow.MilestoneStatusChanged("ENG-001", provider, entries);
+        emit IMultiReleaseEscrow.MilestoneStatusChanged("ENG-001", provider, entries);
         vm.prank(provider);
         escrow.changeMilestoneStatus(_status(1, "Done", true, "ipfs://proof"));
 
-        ISingleReleaseEscrow.Milestone memory m = escrow.getEscrow().milestones[1];
-        assertEq(m.status, "Done");
-        assertEq(m.evidence, "ipfs://proof");
-
-        // Untouched evidence reports a zero hash and keeps the stored value.
-        entries[0] = ISingleReleaseEscrow.MilestoneStatusEntry({index: 1, status: "Reviewed", evidenceHash: bytes32(0)});
+        entries[0] = IMultiReleaseEscrow.MilestoneStatusEntry({index: 1, status: "Reviewed", evidenceHash: bytes32(0)});
         vm.expectEmit(address(escrow));
-        emit ISingleReleaseEscrow.MilestoneStatusChanged("ENG-001", provider, entries);
+        emit IMultiReleaseEscrow.MilestoneStatusChanged("ENG-001", provider, entries);
         vm.prank(provider);
         escrow.changeMilestoneStatus(_status(1, "Reviewed", false, ""));
-        assertEq(escrow.getEscrow().milestones[1].evidence, "ipfs://proof");
+
+        IMultiReleaseEscrow.Milestone memory m = escrow.getEscrow().milestones[1];
+        assertEq(m.status, "Reviewed");
+        assertEq(m.evidence, "ipfs://proof");
     }
 
     function test_change_milestone_status_validation() public {
-        SingleReleaseEscrow escrow = _defaultEscrow();
+        MultiReleaseEscrow escrow = _defaultEscrow();
 
         vm.prank(stranger);
-        vm.expectRevert(ISingleReleaseEscrow.OnlyServiceProviderCanChangeMilestoneStatus.selector);
+        vm.expectRevert(IMultiReleaseEscrow.OnlyServiceProviderCanChangeMilestoneStatus.selector);
         escrow.changeMilestoneStatus(_status(0, "Done", false, ""));
 
         vm.startPrank(provider);
-        vm.expectRevert(ISingleReleaseEscrow.BatchMilestoneUpdateEmpty.selector);
-        escrow.changeMilestoneStatus(new ISingleReleaseEscrow.MilestoneStatusUpdate[](0));
-        vm.expectRevert(ISingleReleaseEscrow.EmptyMilestoneStatus.selector);
+        vm.expectRevert(IMultiReleaseEscrow.BatchMilestoneUpdateEmpty.selector);
+        escrow.changeMilestoneStatus(new IMultiReleaseEscrow.MilestoneStatusUpdate[](0));
+        vm.expectRevert(IMultiReleaseEscrow.EmptyMilestoneStatus.selector);
         escrow.changeMilestoneStatus(_status(0, "", false, ""));
-        vm.expectRevert(ISingleReleaseEscrow.MilestoneToUpdateDoesNotExist.selector);
+        vm.expectRevert(IMultiReleaseEscrow.MilestoneToUpdateDoesNotExist.selector);
         escrow.changeMilestoneStatus(_status(2, "Done", false, ""));
-        vm.expectRevert(ISingleReleaseEscrow.StringTooLong.selector);
-        escrow.changeMilestoneStatus(_status(0, "Done", true, string(new bytes(501))));
+        vm.expectRevert(IMultiReleaseEscrow.StringTooLong.selector);
+        escrow.changeMilestoneStatus(_status(0, string(new bytes(51)), false, ""));
         vm.stopPrank();
     }
 
-    function test_status_change_rejected_when_released_or_resolved_allowed_while_disputed() public {
-        SingleReleaseEscrow escrow = _defaultEscrow();
+    function test_status_change_frozen_per_milestone_once_released_or_resolved() public {
+        MultiReleaseEscrow escrow = _defaultEscrow();
         _fund(escrow, 1000 * USDC);
 
-        vm.prank(approver);
-        escrow.disputeEscrow("scope");
-        vm.prank(provider);
-        escrow.changeMilestoneStatus(_status(0, "More evidence", true, "ipfs://more"));
+        // Milestone 0 released: frozen. Milestone 1 disputed: still editable.
+        _approve(escrow, _idx(0));
+        _release(escrow, _idx(0));
+        _dispute(escrow, _idx(1));
+
+        vm.startPrank(provider);
+        vm.expectRevert(IMultiReleaseEscrow.MilestoneAlreadyReleased.selector);
+        escrow.changeMilestoneStatus(_status(0, "After", false, ""));
+        escrow.changeMilestoneStatus(_status(1, "More evidence", true, "ipfs://more"));
+        vm.stopPrank();
 
         vm.prank(resolver);
-        escrow.resolveDispute(_one(receiver), _single(1000 * USDC));
+        escrow.resolveDispute(_idx(1), _one(receiver2), _amounts(400 * USDC));
         vm.prank(provider);
-        vm.expectRevert(ISingleReleaseEscrow.EscrowAlreadyResolved.selector);
-        escrow.changeMilestoneStatus(_status(0, "After", false, ""));
-
-        SingleReleaseEscrow other = _defaultEscrow();
-        _fund(other, 1000 * USDC);
-        _approveAll(other);
-        vm.prank(releaseSigner);
-        other.releaseFunds();
-        vm.prank(provider);
-        vm.expectRevert(ISingleReleaseEscrow.EscrowAlreadyReleased.selector);
-        other.changeMilestoneStatus(_status(0, "After", false, ""));
+        vm.expectRevert(IMultiReleaseEscrow.MilestoneAlreadyResolved.selector);
+        escrow.changeMilestoneStatus(_status(1, "After", false, ""));
     }
 
     function test_target_requires_multiple_approvers() public {
-        ISingleReleaseEscrow.Escrow memory p = _props(1000 * USDC, 0, 1);
+        IMultiReleaseEscrow.Escrow memory p = _props(0);
         p.roles.approvers = _two(approver, approver2);
         p.milestones[0].approvals.target = 2;
-        SingleReleaseEscrow escrow = _create(p);
+        MultiReleaseEscrow escrow = _create(p);
         _fund(escrow, 1000 * USDC);
 
+        _approve(escrow, _idx(0, 1));
         vm.prank(approver);
-        escrow.approveMilestones(_idx(0));
-        vm.prank(approver);
-        vm.expectRevert(ISingleReleaseEscrow.ApproverAlreadyApprovedMilestone.selector);
+        vm.expectRevert(IMultiReleaseEscrow.ApproverAlreadyApprovedMilestone.selector);
         escrow.approveMilestones(_idx(0));
 
+        // Milestone 1 (target 1) is releasable, milestone 0 (target 2) is not yet.
+        _release(escrow, _idx(1));
         vm.prank(releaseSigner);
-        vm.expectRevert(ISingleReleaseEscrow.EscrowNotCompleted.selector);
-        escrow.releaseFunds();
+        vm.expectRevert(IMultiReleaseEscrow.EscrowNotCompleted.selector);
+        escrow.releaseFunds(_idx(0));
 
         vm.prank(approver2);
         escrow.approveMilestones(_idx(0));
-        ISingleReleaseEscrow.MilestoneApprovals memory a = escrow.getEscrow().milestones[0].approvals;
-        assertEq(a.approvalCount, 2);
-        assertEq(a.approvedBy[1], approver2);
-
         vm.prank(approver2);
-        vm.expectRevert(ISingleReleaseEscrow.MilestoneHasAlreadyBeenApproved.selector);
+        vm.expectRevert(IMultiReleaseEscrow.MilestoneHasAlreadyBeenApproved.selector);
         escrow.approveMilestones(_idx(0));
-
-        vm.prank(releaseSigner);
-        escrow.releaseFunds();
+        _release(escrow, _idx(0));
+        assertEq(usdc.balanceOf(address(escrow)), 0);
     }
 
     function test_approve_milestones_validation() public {
-        SingleReleaseEscrow escrow = _defaultEscrow();
-        uint32[] memory dup = new uint32[](2);
+        MultiReleaseEscrow escrow = _defaultEscrow();
 
         // Unauthorized fails before the duplicate check.
         vm.prank(stranger);
-        vm.expectRevert(ISingleReleaseEscrow.UnauthorizedApprover.selector);
-        escrow.approveMilestones(dup);
+        vm.expectRevert(IMultiReleaseEscrow.UnauthorizedApprover.selector);
+        escrow.approveMilestones(_idx(0, 0));
 
         vm.startPrank(approver);
-        vm.expectRevert(ISingleReleaseEscrow.DuplicateMilestoneIndex.selector);
-        escrow.approveMilestones(dup);
-        vm.expectRevert(ISingleReleaseEscrow.BatchMilestoneApproveEmpty.selector);
+        vm.expectRevert(IMultiReleaseEscrow.DuplicateMilestoneIndex.selector);
+        escrow.approveMilestones(_idx(0, 0));
+        vm.expectRevert(IMultiReleaseEscrow.BatchMilestoneApproveEmpty.selector);
         escrow.approveMilestones(new uint32[](0));
-        vm.expectRevert(ISingleReleaseEscrow.MilestoneToApproveDoesNotExist.selector);
-        escrow.approveMilestones(_idx(5));
+        // scenario_a_approve_out_of_range_index_is_atomic
+        vm.expectRevert(IMultiReleaseEscrow.MilestoneToApproveDoesNotExist.selector);
+        escrow.approveMilestones(_idx(0, 5));
         vm.stopPrank();
+        assertEq(escrow.getEscrow().milestones[0].approvals.approvalCount, 0);
     }
 
     function test_manage_milestones_add_and_update() public {
-        SingleReleaseEscrow escrow = _defaultEscrow();
+        MultiReleaseEscrow escrow = _defaultEscrow();
 
-        ISingleReleaseEscrow.Milestone[] memory add = new ISingleReleaseEscrow.Milestone[](1);
-        add[0] = _milestone("Third", 1);
-        ISingleReleaseEscrow.MilestoneUpdate[] memory upd = new ISingleReleaseEscrow.MilestoneUpdate[](1);
-        upd[0] = ISingleReleaseEscrow.MilestoneUpdate({index: 0, setDescription: true, newDescription: "First v2"});
+        IMultiReleaseEscrow.MilestoneUpdate[] memory upd = new IMultiReleaseEscrow.MilestoneUpdate[](1);
+        upd[0] = IMultiReleaseEscrow.MilestoneUpdate({
+            index: 0, setDescription: true, newDescription: "Design v2", setAmount: true, newAmount: 650 * USDC
+        });
 
-        ISingleReleaseEscrow.MilestoneAddedEntry[] memory added = new ISingleReleaseEscrow.MilestoneAddedEntry[](1);
-        added[0] = ISingleReleaseEscrow.MilestoneAddedEntry({index: 2, descriptionHash: sha256(bytes("Third"))});
-        ISingleReleaseEscrow.MilestoneUpdatedEntry[] memory updated =
-            new ISingleReleaseEscrow.MilestoneUpdatedEntry[](1);
-        updated[0] =
-            ISingleReleaseEscrow.MilestoneUpdatedEntry({index: 0, newDescriptionHash: sha256(bytes("First v2"))});
+        IMultiReleaseEscrow.MilestoneAddedEntry[] memory added = new IMultiReleaseEscrow.MilestoneAddedEntry[](1);
+        added[0] = IMultiReleaseEscrow.MilestoneAddedEntry({index: 2, amount: 50 * USDC, descriptionHash: sha256("QA")});
+        IMultiReleaseEscrow.MilestoneUpdatedEntry[] memory updated = new IMultiReleaseEscrow.MilestoneUpdatedEntry[](1);
+        updated[0] = IMultiReleaseEscrow.MilestoneUpdatedEntry({
+            index: 0, amountChanged: true, newAmount: 650 * USDC, newDescriptionHash: sha256("Design v2")
+        });
         vm.expectEmit(address(escrow));
-        emit ISingleReleaseEscrow.MilestonesManaged("ENG-001", admin, 1, 1, added, updated);
+        emit IMultiReleaseEscrow.MilestonesManaged("ENG-001", admin, 1, 1, added, updated);
 
         vm.prank(admin);
-        escrow.manageMilestones(add, upd);
+        escrow.manageMilestones(_newMilestone("QA", 50 * USDC, receiver2), upd);
 
-        ISingleReleaseEscrow.Escrow memory e = escrow.getEscrow();
+        IMultiReleaseEscrow.Escrow memory e = escrow.getEscrow();
         assertEq(e.milestones.length, 3);
-        assertEq(e.milestones[0].description, "First v2");
-        assertEq(e.milestones[2].description, "Third");
+        assertEq(e.milestones[0].description, "Design v2");
+        assertEq(e.milestones[0].amount, 650 * USDC);
+        assertEq(e.milestones[2].receiver, receiver2);
     }
 
     function test_manage_milestones_with_funds() public {
-        SingleReleaseEscrow escrow = _defaultEscrow();
+        MultiReleaseEscrow escrow = _defaultEscrow();
         _fund(escrow, 1 * USDC);
+        _approve(escrow, _idx(0));
 
-        // Appending is allowed after funding...
-        ISingleReleaseEscrow.Milestone[] memory add = new ISingleReleaseEscrow.Milestone[](1);
-        add[0] = _milestone("Extra", 1);
+        // test_append_milestones_with_funds_and_existing_approved
         vm.prank(admin);
-        escrow.manageMilestones(add, new ISingleReleaseEscrow.MilestoneUpdate[](0));
+        escrow.manageMilestones(_newMilestone("Extra", 5 * USDC, receiver), _noUpdates());
+        assertEq(escrow.getEscrow().milestones[0].approvals.approvalCount, 1);
 
-        // ...editing is not.
-        ISingleReleaseEscrow.MilestoneUpdate[] memory upd = new ISingleReleaseEscrow.MilestoneUpdate[](1);
-        upd[0] = ISingleReleaseEscrow.MilestoneUpdate({index: 0, setDescription: true, newDescription: "x"});
+        IMultiReleaseEscrow.MilestoneUpdate[] memory upd = new IMultiReleaseEscrow.MilestoneUpdate[](1);
+        upd[0].index = 1;
+        upd[0].setAmount = true;
+        upd[0].newAmount = 1;
         vm.prank(admin);
-        vm.expectRevert(ISingleReleaseEscrow.MilestoneUpdateNotAllowedWithFunds.selector);
-        escrow.manageMilestones(new ISingleReleaseEscrow.Milestone[](0), upd);
+        vm.expectRevert(IMultiReleaseEscrow.MilestoneUpdateNotAllowedWithFunds.selector);
+        escrow.manageMilestones(_noMilestones(), upd);
     }
 
     function test_manage_milestones_validation() public {
-        SingleReleaseEscrow escrow = _defaultEscrow();
-        ISingleReleaseEscrow.Milestone[] memory none = new ISingleReleaseEscrow.Milestone[](0);
-        ISingleReleaseEscrow.MilestoneUpdate[] memory noUpd = new ISingleReleaseEscrow.MilestoneUpdate[](0);
+        MultiReleaseEscrow escrow = _defaultEscrow();
 
         vm.prank(admin);
-        vm.expectRevert(ISingleReleaseEscrow.NoMilestoneDefined.selector);
-        escrow.manageMilestones(none, noUpd);
+        vm.expectRevert(IMultiReleaseEscrow.NoMilestoneDefined.selector);
+        escrow.manageMilestones(_noMilestones(), _noUpdates());
 
-        ISingleReleaseEscrow.Milestone[] memory add = new ISingleReleaseEscrow.Milestone[](1);
-        add[0] = _milestone("x", 1);
         vm.prank(stranger);
-        vm.expectRevert(ISingleReleaseEscrow.OnlyAdminAddressExecuteThisFunction.selector);
-        escrow.manageMilestones(add, noUpd);
+        vm.expectRevert(IMultiReleaseEscrow.OnlyAdminAddressExecuteThisFunction.selector);
+        escrow.manageMilestones(_newMilestone("x", 1, receiver), _noUpdates());
 
-        add[0] = _milestone(string(new bytes(501)), 1);
-        vm.prank(admin);
-        vm.expectRevert(ISingleReleaseEscrow.StringTooLong.selector);
-        escrow.manageMilestones(add, noUpd);
+        vm.startPrank(admin);
+        vm.expectRevert(IMultiReleaseEscrow.AmountCannotBeZero.selector);
+        escrow.manageMilestones(_newMilestone("x", 0, receiver), _noUpdates());
+        vm.expectRevert(IMultiReleaseEscrow.StringTooLong.selector);
+        escrow.manageMilestones(_newMilestone(string(new bytes(501)), 1, receiver), _noUpdates());
+        // test_manage_milestones_rejects_dispute_resolver_as_receiver
+        vm.expectRevert(IMultiReleaseEscrow.DisputeResolverOverlapsWithOtherRole.selector);
+        escrow.manageMilestones(_newMilestone("x", 1, resolver), _noUpdates());
+        // test_manage_milestones_rejects_admin_as_receiver
+        vm.expectRevert(IMultiReleaseEscrow.AdminAddressOverlapsWithOtherRole.selector);
+        escrow.manageMilestones(_newMilestone("x", 1, admin), _noUpdates());
+        vm.expectRevert(IMultiReleaseEscrow.ZeroAddress.selector);
+        escrow.manageMilestones(_newMilestone("x", 1, address(0)), _noUpdates());
 
-        add[0] = _milestone("x", 2);
-        vm.prank(admin);
-        vm.expectRevert(ISingleReleaseEscrow.TargetExceedsApprovers.selector);
-        escrow.manageMilestones(add, noUpd);
+        // test_manage_milestones_rejects_non_positive_amount_update
+        IMultiReleaseEscrow.MilestoneUpdate[] memory upd = new IMultiReleaseEscrow.MilestoneUpdate[](1);
+        upd[0].setAmount = true;
+        vm.expectRevert(IMultiReleaseEscrow.AmountCannotBeZero.selector);
+        escrow.manageMilestones(_noMilestones(), upd);
 
-        ISingleReleaseEscrow.MilestoneUpdate[] memory upd = new ISingleReleaseEscrow.MilestoneUpdate[](1);
-        upd[0] = ISingleReleaseEscrow.MilestoneUpdate({index: 9, setDescription: true, newDescription: "x"});
-        vm.prank(admin);
-        vm.expectRevert(ISingleReleaseEscrow.InvalidMilestoneIndex.selector);
-        escrow.manageMilestones(none, upd);
+        upd[0].index = 9;
+        upd[0].newAmount = 1;
+        vm.expectRevert(IMultiReleaseEscrow.InvalidMilestoneIndex.selector);
+        escrow.manageMilestones(_noMilestones(), upd);
+        vm.stopPrank();
     }
 
-    function _single(uint256 a) internal pure returns (uint256[] memory arr) {
-        arr = new uint256[](1);
-        arr[0] = a;
+    /// Soroban lets a new milestone arrive already disputed or resolved; the
+    /// port rejects it like initialize does.
+    function test_manage_milestones_rejects_new_milestone_with_dispute_state() public {
+        MultiReleaseEscrow escrow = _defaultEscrow();
+        IMultiReleaseEscrow.Milestone[] memory add = _newMilestone("x", 1, receiver);
+        add[0].dispute.isDisputed = true;
+        vm.prank(admin);
+        vm.expectRevert(IMultiReleaseEscrow.FlagsMustBeFalse.selector);
+        escrow.manageMilestones(add, _noUpdates());
+
+        add[0].dispute.isDisputed = false;
+        add[0].dispute.resolved = true;
+        vm.prank(admin);
+        vm.expectRevert(IMultiReleaseEscrow.FlagsMustBeFalse.selector);
+        escrow.manageMilestones(add, _noUpdates());
+    }
+
+    function test_manage_milestones_blocked_by_escrow_state() public {
+        MultiReleaseEscrow escrow = _defaultEscrow();
+        _fund(escrow, 1000 * USDC);
+
+        _dispute(escrow, _idx(1));
+        vm.prank(admin);
+        vm.expectRevert(IMultiReleaseEscrow.EscrowOpenedForDisputeResolution.selector);
+        escrow.manageMilestones(_newMilestone("x", 1, receiver), _noUpdates());
+
+        vm.prank(resolver);
+        escrow.resolveDispute(_idx(1), _one(receiver2), _amounts(400 * USDC));
+        vm.prank(admin);
+        vm.expectRevert(IMultiReleaseEscrow.EscrowAlreadyResolved.selector);
+        escrow.manageMilestones(_newMilestone("x", 1, receiver), _noUpdates());
+
+        MultiReleaseEscrow other = _defaultEscrow();
+        _fund(other, 1000 * USDC);
+        _approve(other, _idx(0, 1));
+        _release(other, _idx(0, 1));
+        vm.prank(admin);
+        vm.expectRevert(IMultiReleaseEscrow.EscrowAlreadyReleased.selector);
+        other.manageMilestones(_newMilestone("x", 1, receiver), _noUpdates());
     }
 }
