@@ -6,12 +6,13 @@ details for humans; this file holds what a new session needs to work safely acro
 
 ## The Arc project at a glance
 
-Four sibling folders under `~/Documents/Programacion/Proyectos/`:
+Five sibling folders under `~/Documents/Programacion/Proyectos/`:
 
 | Folder | GitHub (Trustless-Work org) | Role | Branches |
 | --- | --- | --- | --- |
 | `Trustless-Work-Arc-Escrow` (**this repo**) | `trustlesswork-smart-contract-arc` (internal) | Solidity contracts | `single-release-v2`, `multi-release-v2`: **one contract per branch** |
 | `Trustless-Work-Arc-API` | `trustlesswork-core-api-arc` (internal) | NestJS REST API that builds unsigned transactions for these contracts | `main` |
+| `Trustless-Work-Arc-Backoffice` | not on GitHub yet | Next.js backoffice on top of the API: deploy, fund and run escrows with MetaMask or a local dev wallet | `main` |
 | `Trustless-Work-Smart-Escrow` | `trustlesswork-smart-contract-stellar` | **Soroban (Rust) source of truth** the ports follow | `single-release-develop-v2`, `multi-release-develop-v2` (use `origin/…`) |
 | `Trustless-Work-Core` | `trustlesswork-core-api` | Stellar core API that the Arc API mirrors (routes, fields, error codes) | `main` |
 
@@ -141,6 +142,9 @@ without via-IR on multi-release), and the API synced and green if an ABI changed
      until you do);
    - update the DTOs and use cases if a signature changed;
    - run `npm test && npm run test:e2e`.
+5. **In the backoffice** (`../Trustless-Work-Arc-Backoffice`), only if the API's wire shape changed: update
+   `src/features/arc-api/types.ts` and the affected dialogs. `npm run local` in the API gives it a chain
+   with the new contracts to click through.
 
 `CLAUDE.md` is the same on both branches. When you change it, apply the change to both (cherry-pick).
 
