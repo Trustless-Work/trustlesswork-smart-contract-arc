@@ -106,7 +106,9 @@ DELEGATECALL. Current sizes: escrow 20.5 KB with via-IR, 18.9 KB without.
 | Single-release factory (owner and fee recipient = test account A) | `0x4d819Dd3a6af9E0323102cf71E1D0FE29904F802` |
 | Single-release escrow `ENG-001` (released) | `0x35F4457491F7f9Dd7D2457483A751469675710B4` |
 | Single-release escrow `ENG-002` (approved, unfunded) | `0x9AE6A0668d8Fd9FDD6EDae30b7FA29B23489D800` |
-| Multi-release factory | **not deployed yet** (`forge script script/Deploy.s.sol` on `multi-release-v2`) |
+| Multi-release factory (owner and fee recipient = test account A; `forge script`, block 64850225) | `0x6CC61Bf5c4bd56290189265964b66A9b2CCD7458` |
+| Multi-release escrow implementation (created by that factory) | `0xBe6E5693FE6f5b27c218780e7773dFBd7ae6E6c8` |
+| `MultiReleaseValidation` library (linked into the implementation) | `0x9487397A8A97C828AABFEA85291c85f1eAe36b91` |
 
 The user's test accounts: A `0x3025B4E63cdbBF2a12981fF38E7678C5a52e0D34` (admin, platform, funder),
 B `0x40BC51511ad79166FCc3506bea745A928f7E2708` (approver, provider, release signer, receiver) and C
