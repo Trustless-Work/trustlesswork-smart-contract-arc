@@ -13,6 +13,7 @@ dispute flow, fee math and error names. The differences below come from moving t
 | --- | --- |
 | `src/SingleReleaseEscrow.sol` | Escrow logic. One EIP-1167 clone per escrow. |
 | `src/SingleReleaseEscrowFactory.sol` | Deploys and initializes clones atomically; holds the Trustless Work fee recipient. |
+| `src/utils/CalldataExecutor.sol` | `execute(bytes)`, inherited by the factory and the escrow: runs one of the contract's own functions from its ABI-encoded calldata. |
 | `src/interfaces/ISingleReleaseEscrow.sol` | Structs, errors and events (the Rust `storage/types.rs`, `error.rs`, `events/handler.rs`). |
 | `test/` | Unit and fuzz tests with a 6-decimal EIP-2612 mock of USDC. |
 | `test/fork/ArcFork.t.sol` | Checks against the real Arc testnet USDC. |
@@ -50,6 +51,10 @@ dispute flow, fee math and error names. The differences below come from moving t
   be zero, so these checks are new.
 - **Error surfacing.** `approveAndReleaseMilestones` bubbles up milestone errors as they are, instead of mapping
   them with `From<MilestoneError> for EscrowError`.
+- **`execute(bytes)`, an Arc-only addition.** The factory and the escrow accept the ABI-encoded call to any of their
+  own functions and run it with a delegatecall to themselves, so `msg.sender` and every check stay the same. It
+  exists because Circle CLI agent wallets (`circle wallet execute`, CLI 1.1.4) can pass `bytes` but cannot encode
+  array or tuple arguments. Soroban has no counterpart.
 
 ## Arc-specific notes
 
@@ -65,7 +70,7 @@ dispute flow, fee math and error names. The differences below come from moving t
   inside `forge script`. The fork test covers what can run locally, and `script/e2e.sh` runs the real flow on-chain.
 - **EVM target.** Arc runs Osaka. This build targets `prague`, a subset of Osaka that still includes the transient
   storage used by the reentrancy guard.
-- **Contract size.** The escrow runtime is 23.7 KB, just under the 24 KB EIP-170 limit. Porting CCTP or other large
+- **Contract size.** The escrow runtime is 23,989 bytes, 587 under the 24,576-byte EIP-170 limit. Porting CCTP or other large
   features will require moving validators into an external library.
 
 ## Usage

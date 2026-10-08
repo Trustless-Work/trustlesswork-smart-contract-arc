@@ -9,6 +9,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {ISingleReleaseEscrow} from "./interfaces/ISingleReleaseEscrow.sol";
 import {ISingleReleaseEscrowFactory} from "./interfaces/ISingleReleaseEscrowFactory.sol";
+import {CalldataExecutor} from "./utils/CalldataExecutor.sol";
 
 /// @title Trustless Work single-release escrow (Arc / EVM port of Soroban v2)
 /// @notice One clone per escrow, deployed and initialized by
@@ -16,7 +17,7 @@ import {ISingleReleaseEscrowFactory} from "./interfaces/ISingleReleaseEscrowFact
 /// argument becomes a check on `msg.sender`, so those arguments are gone.
 /// Holds an ERC-20 (on Arc: USDC's 6-decimal ERC-20 interface); native value
 /// is never accepted.
-contract SingleReleaseEscrow is ISingleReleaseEscrow, ReentrancyGuardTransient {
+contract SingleReleaseEscrow is ISingleReleaseEscrow, ReentrancyGuardTransient, CalldataExecutor {
     using SafeERC20 for IERC20;
 
     uint256 private constant MAX_SHORT_STRING = 100;
