@@ -12,7 +12,7 @@ Five sibling folders under `~/Documents/Programacion/Proyectos/`:
 | --- | --- | --- | --- |
 | `Trustless-Work-Arc-Escrow` (**this repo**) | `trustlesswork-smart-contract-arc` (internal) | Solidity contracts | `single-release-v2`, `multi-release-v2`: **one contract per branch** |
 | `Trustless-Work-Arc-API` | `trustlesswork-core-api-arc` (internal) | NestJS REST API that builds unsigned transactions for these contracts | `main` |
-| `Trustless-Work-Arc-Backoffice` | not on GitHub yet | Next.js backoffice on top of the API: deploy, fund and run escrows with MetaMask or a local dev wallet | `main` |
+| `Trustless-Work-Arc-Backoffice` | `trustlesswork-backoffice-arc` (internal) | Next.js backoffice on top of the API: deploy, fund and run escrows with MetaMask or a local dev wallet | `main` |
 | `Trustless-Work-Smart-Escrow` | `trustlesswork-smart-contract-stellar` | **Soroban (Rust) source of truth** the ports follow | `single-release-develop-v2`, `multi-release-develop-v2` (use `origin/…`) |
 | `Trustless-Work-Core` | `trustlesswork-core-api` | Stellar core API that the Arc API mirrors (routes, fields, error codes) | `main` |
 
@@ -62,7 +62,9 @@ transaction (no front-running window).
   `get_multiple_escrow_balances` moved to the factory.
 - **Deliberate deviations** (documented in each README): the fee recipient is fixed by the factory; the
   rounding remainder goes to the last recipient in array order; funding credits the balance delta;
-  zero-address checks; errors are not remapped. On multi-release, two Soroban rule gaps are closed:
+  zero-address checks; errors are not remapped; `execute(bytes)` on the factory and the escrow lets Circle CLI
+  agent wallets, which cannot encode array or tuple arguments, reach every function. On multi-release, two
+  Soroban rule gaps are closed:
   - update overlap checks run against the **stored** milestones;
   - new milestones cannot arrive disputed or resolved.
 
@@ -72,7 +74,7 @@ transaction (no front-running window).
 
 With every rule inline, the multi-release escrow exceeded the 24 KB EIP-170 limit (it would not deploy from
 Remix). All rules therefore live in `MultiReleaseValidation`, an external library that the escrow calls with
-DELEGATECALL. Current sizes: escrow 20.5 KB with via-IR, 18.9 KB without.
+DELEGATECALL. Current sizes: escrow 20.8 KB with via-IR, 19.3 KB without.
 
 - The factory bytecode embeds the escrow bytecode, which carries a `__$<hash>$__` placeholder, so **the
   library must be deployed first and linked**.
@@ -99,15 +101,20 @@ DELEGATECALL. Current sizes: escrow 20.5 KB with via-IR, 18.9 KB without.
 - **EVM target:** Arc runs Osaka; `foundry.toml` targets `prague`, a subset of it that includes the transient
   storage used by `ReentrancyGuardTransient`. `via_ir = true`, 200 optimizer runs, solc `0.8.30`.
 
-## Deployed on Arc testnet (test data, as of 2026-09-30)
+## Deployed on Arc testnet (test data, as of 2026-10-06)
+
+The factories with `execute(bytes)` are the current ones; the earlier ones lack it and do not work for Circle
+CLI agent wallets.
 
 | What | Address |
 | --- | --- |
-| Single-release factory (owner and fee recipient = test account A) | `0x4d819Dd3a6af9E0323102cf71E1D0FE29904F802` |
+| Single-release factory with `execute(bytes)` (owner and fee recipient = test account A) | `0x829fE7040797Df140636901e79F1bA448B7e9ae0` |
+| Multi-release factory with `execute(bytes)` (owner and fee recipient = test account A; links the same library) | `0x7B04302DCEC430D74e8e38B35Cef96EbaD51b7fC` |
+| Earlier single-release factory, without `execute` | `0x4d819Dd3a6af9E0323102cf71E1D0FE29904F802` |
 | Single-release escrow `ENG-001` (released) | `0x35F4457491F7f9Dd7D2457483A751469675710B4` |
 | Single-release escrow `ENG-002` (approved, unfunded) | `0x9AE6A0668d8Fd9FDD6EDae30b7FA29B23489D800` |
-| Multi-release factory (owner and fee recipient = test account A; `forge script`, block 64850225) | `0x6CC61Bf5c4bd56290189265964b66A9b2CCD7458` |
-| Multi-release escrow implementation (created by that factory) | `0xBe6E5693FE6f5b27c218780e7773dFBd7ae6E6c8` |
+| Earlier multi-release factory, without `execute` (block 64850225) | `0x6CC61Bf5c4bd56290189265964b66A9b2CCD7458` |
+| Multi-release escrow implementation of the earlier factory | `0xBe6E5693FE6f5b27c218780e7773dFBd7ae6E6c8` |
 | `MultiReleaseValidation` library (linked into the implementation) | `0x9487397A8A97C828AABFEA85291c85f1eAe36b91` |
 
 The user's test accounts: A `0x3025B4E63cdbBF2a12981fF38E7678C5a52e0D34` (admin, platform, funder),

@@ -23,6 +23,7 @@ gaps that the port closes (see [Behavioural differences](#behavioural-difference
 | `src/MultiReleaseEscrow.sol` | Escrow logic (state changes and token transfers). One EIP-1167 clone per escrow. |
 | `src/libraries/MultiReleaseValidation.sol` | Every validation rule, check for check, in the Soroban order. External library, called with DELEGATECALL. |
 | `src/MultiReleaseEscrowFactory.sol` | Deploys and initializes clones atomically; holds the Trustless Work fee recipient. |
+| `src/utils/CalldataExecutor.sol` | `execute(bytes)`, inherited by the factory and the escrow: runs one of the contract's own functions from its ABI-encoded calldata. |
 | `src/interfaces/IMultiReleaseEscrow.sol` | Structs, errors and events (the Rust `storage/types.rs`, `error.rs`, `events/handler.rs`). |
 | `test/` | Unit and fuzz tests with a 6-decimal EIP-2612 mock of USDC. |
 | `test/fork/ArcFork.t.sol` | Checks against the real Arc testnet USDC. |
@@ -96,6 +97,10 @@ The global roles that can open a dispute are approvers, service providers, the p
 - **Error surfacing.** Errors come out with their own names. Soroban remaps them through
   `From<MilestoneError/ReleaseError> for EscrowError` in `approve_and_release_milestones`; for example, the
   milestone batch limit there becomes `TooManyMilestones` in Soroban and stays `BatchTooLarge` here.
+- **`execute(bytes)`, an Arc-only addition.** The factory and the escrow accept the ABI-encoded call to any of their
+  own functions and run it with a delegatecall to themselves, so `msg.sender` and every check stay the same. It
+  exists because Circle CLI agent wallets (`circle wallet execute`, CLI 1.1.4) can pass `bytes` but cannot encode
+  array or tuple arguments. Soroban has no counterpart.
 - **Rule gap 1: `update_escrow` overlap checks.** Soroban checks "a dispute resolver or the admin must not be a
   milestone receiver" against the milestones passed in the argument, but it stores the existing milestones and
   ignores the argument. Before funding, an admin could pass look-alike milestones and make a real receiver a
@@ -130,7 +135,7 @@ above 24 KB (EIP-170), so the rules moved to `MultiReleaseValidation`. Current s
 
 | Contract | via-IR (`foundry.toml`) | without via-IR (Remix default) |
 | --- | --- | --- |
-| `MultiReleaseEscrow` | 20.5 KB | 18.9 KB |
+| `MultiReleaseEscrow` | 20.8 KB | 19.3 KB |
 | `MultiReleaseValidation` | 9.0 KB | 12.5 KB |
 
 The library is deployed once and shared by every escrow. Its address is linked into the escrow bytecode, which

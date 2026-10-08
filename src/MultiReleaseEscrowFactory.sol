@@ -8,12 +8,13 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {IMultiReleaseEscrow} from "./interfaces/IMultiReleaseEscrow.sol";
 import {IMultiReleaseEscrowFactory} from "./interfaces/IMultiReleaseEscrowFactory.sol";
 import {MultiReleaseEscrow} from "./MultiReleaseEscrow.sol";
+import {CalldataExecutor} from "./utils/CalldataExecutor.sol";
 
 /// @notice EVM counterpart of the Soroban deployer (`tw_new_multi_release_escrow`).
 /// Deploys one EIP-1167 clone per escrow and initializes it in the same call, so
 /// no one can front-run `initialize`. The fixed `implementation` plays the role
 /// of the Soroban approved WASM hash.
-contract MultiReleaseEscrowFactory is IMultiReleaseEscrowFactory, Ownable2Step {
+contract MultiReleaseEscrowFactory is IMultiReleaseEscrowFactory, Ownable2Step, CalldataExecutor {
     uint256 private constant MAX_ESCROWS = 20;
 
     address public immutable implementation;

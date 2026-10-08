@@ -10,6 +10,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IMultiReleaseEscrow} from "./interfaces/IMultiReleaseEscrow.sol";
 import {IMultiReleaseEscrowFactory} from "./interfaces/IMultiReleaseEscrowFactory.sol";
 import {MultiReleaseValidation as V} from "./libraries/MultiReleaseValidation.sol";
+import {CalldataExecutor} from "./utils/CalldataExecutor.sol";
 
 /// @title Trustless Work multi-release escrow (Arc / EVM port of Soroban v2)
 /// @notice One clone per escrow, deployed and initialized by
@@ -19,7 +20,7 @@ import {MultiReleaseValidation as V} from "./libraries/MultiReleaseValidation.so
 /// `msg.sender`, so those arguments are gone. Holds an ERC-20 (on Arc: USDC's
 /// 6-decimal ERC-20 interface); native value is never accepted. The
 /// validation rules live in the linked `MultiReleaseValidation` library.
-contract MultiReleaseEscrow is IMultiReleaseEscrow, ReentrancyGuardTransient {
+contract MultiReleaseEscrow is IMultiReleaseEscrow, ReentrancyGuardTransient, CalldataExecutor {
     using SafeERC20 for IERC20;
 
     uint256 private constant TRUSTLESS_WORK_FEE_BPS = 30;
