@@ -122,6 +122,23 @@ B `0x40BC51511ad79166FCc3506bea745A928f7E2708` (approver, provider, release sign
 `0xE57f683F965de94c377Dc97E78E1A6d89e5531df` (dispute resolver). Never ask for or handle their keys; the user
 signs.
 
+## Deployed on Arc mainnet (2026-10-30)
+
+The user deployed both factories with their own keystore ("Deploy on Arc mainnet" in the README): single-release
+from `single-release-v2` at `e8e9a70` (block 28625123), multi-release from `multi-release-v2` at `d64b619` (block
+28623756). The code on-chain matches those builds; only the immutable addresses differ.
+
+| What | Address |
+| --- | --- |
+| Single-release factory (owner and fee recipient = test account A) | `0x6a65ebD7820604446898df89CeA284a46E9B621c` |
+| Single-release escrow implementation | `0xc04bfd01e08bE40419581b8587b347df4beC15E5` |
+| Multi-release factory (owner and fee recipient = test account A) | `0x69d4Fd89C4dCf43d2A08f4552eB15D66Cb9a6ab3` |
+| Multi-release escrow implementation | `0xd9733C7775f55F877Eb32d62dE90F90Ddc138E28` |
+
+The owner can move the fee (`setTrustlessWorkFeeRecipient`) and hand a factory over in two steps
+(`transferOwnership`, then `acceptOwnership` from the new owner). Not verified on an explorer yet. Never deploy on
+mainnet or handle a mainnet key yourself; the user signs.
+
 ## Commands
 
 ```bash
@@ -129,8 +146,10 @@ git submodule update --init --recursive      # forge-std, OpenZeppelin v5.4.0
 forge build --sizes
 forge test                                    # unit + fuzz
 forge test --match-path test/fork/ArcFork.t.sol --fork-url arc_testnet
+forge test --match-path test/fork/ArcFork.t.sol --fork-url arc_mainnet
 forge fmt                                     # must be clean before committing
 FACTORY_OWNER=0x… TW_FEE_RECIPIENT=0x… forge script script/Deploy.s.sol --rpc-url arc_testnet --private-key … --broadcast
+FACTORY_OWNER=0x… TW_FEE_RECIPIENT=0x… forge script script/Deploy.s.sol --rpc-url arc_mainnet --sender 0x…   # mainnet dry run
 PRIVATE_KEY=0x… ./script/e2e.sh              # live flow; test on anvil with RPC_URL/USDC overrides first
 ```
 

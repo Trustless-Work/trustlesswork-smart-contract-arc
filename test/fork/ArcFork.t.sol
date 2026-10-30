@@ -8,8 +8,9 @@ import {ISingleReleaseEscrow} from "../../src/interfaces/ISingleReleaseEscrow.so
 import {SingleReleaseEscrow} from "../../src/SingleReleaseEscrow.sol";
 import {SingleReleaseEscrowFactory} from "../../src/SingleReleaseEscrowFactory.sol";
 
-/// @notice Checks against the real USDC on an Arc testnet fork.
+/// @notice Checks against the real USDC on an Arc fork, testnet or mainnet.
 /// Run with: forge test --match-path test/fork/ArcFork.t.sol --fork-url arc_testnet
+///      and: forge test --match-path test/fork/ArcFork.t.sol --fork-url arc_mainnet
 /// @dev Arc's USDC moves balances through node-level system precompiles
 /// (e.g. `0x1800…0001::isBlocklisted`) that Foundry's EVM does not implement,
 /// so token transfers cannot run on a local fork. Transfer flows are covered by
@@ -17,9 +18,10 @@ import {SingleReleaseEscrowFactory} from "../../src/SingleReleaseEscrowFactory.s
 contract ArcForkTest is Test {
     IERC20Metadata internal constant USDC = IERC20Metadata(0x3600000000000000000000000000000000000000);
     uint256 internal constant ARC_TESTNET = 5042002;
+    uint256 internal constant ARC_MAINNET = 5042;
 
     function test_fork_usdc_interface_and_escrow_creation() public {
-        if (block.chainid != ARC_TESTNET) vm.skip(true);
+        if (block.chainid != ARC_TESTNET && block.chainid != ARC_MAINNET) vm.skip(true);
         assertEq(USDC.decimals(), 6);
 
         // Native USDC (18 decimals) and the ERC-20 view (6 decimals) share one balance.

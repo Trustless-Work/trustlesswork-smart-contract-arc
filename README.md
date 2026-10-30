@@ -80,14 +80,45 @@ git submodule update --init --recursive
 forge build
 forge test                                                            # unit + fuzz tests
 forge test --match-path test/fork/ArcFork.t.sol --fork-url arc_testnet
+forge test --match-path test/fork/ArcFork.t.sol --fork-url arc_mainnet
 ```
 
-Deploy the factory:
+Deploy the factory on testnet:
 
 ```bash
 FACTORY_OWNER=0x... TW_FEE_RECIPIENT=0x... forge script script/Deploy.s.sol \
   --rpc-url arc_testnet --private-key $PRIVATE_KEY --broadcast
 ```
+
+### Deploy on Arc mainnet
+
+Mainnet runs on real USDC: the deploying account pays the gas, and the factory owner can change the address that
+receives the Trustless Work fee. Choose both addresses before you deploy.
+
+1. **Simulate it.** Nothing is signed or sent; the output shows the addresses and the gas:
+
+   ```bash
+   FACTORY_OWNER=0x... TW_FEE_RECIPIENT=0x... forge script script/Deploy.s.sol \
+     --rpc-url arc_mainnet --sender <deployer address>
+   ```
+
+   The factory (which deploys the implementation) takes about 8.1M gas: around 0.16 USDC at a 20 gwei base fee,
+   and at most about 0.35 USDC.
+
+2. **Deploy.** Sign with a Foundry keystore (create it once with `cast wallet import <name> --interactive`) or a
+   Ledger (`--ledger` instead of `--account <name>`), so the private key never ends up in the shell history:
+
+   ```bash
+   FACTORY_OWNER=0x... TW_FEE_RECIPIENT=0x... forge script script/Deploy.s.sol \
+     --rpc-url arc_mainnet --account <name> --broadcast
+   ```
+
+   Leave out `--verify`: the API of [explorer.arc.io](https://explorer.arc.io) sits behind a Cloudflare challenge,
+   so Foundry's Blockscout verifier gets an HTML page back and retries until it gives up. Verify afterwards on
+   Sourcify, which supports Arc mainnet (chain 5042), with `forge verify-contract --verifier sourcify`.
+
+3. **Record the addresses** the script prints (factory and implementation) in "Deployed on Arc mainnet" in
+   `CLAUDE.md`, and set the factory in the API as `ARC_MAINNET_SINGLE_RELEASE_FACTORY_ADDRESS`.
 
 Run the live end-to-end flow. The key needs about 1.5 testnet USDC:
 
