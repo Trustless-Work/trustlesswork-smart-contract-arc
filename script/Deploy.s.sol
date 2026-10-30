@@ -10,6 +10,8 @@ import {MultiReleaseEscrowFactory} from "../src/MultiReleaseEscrowFactory.sol";
 /// automatically.
 ///   FACTORY_OWNER=0x.. TW_FEE_RECIPIENT=0x.. forge script script/Deploy.s.sol \
 ///     --rpc-url arc_testnet --private-key $PRIVATE_KEY --broadcast
+/// On mainnet, simulate first and sign with a keystore or a Ledger: see
+/// "Deploy on Arc mainnet" in the README.
 contract Deploy is Script {
     function run() external returns (MultiReleaseEscrowFactory factory) {
         address owner = vm.envAddress("FACTORY_OWNER");
