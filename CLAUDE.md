@@ -102,7 +102,7 @@ DELEGATECALL. Current sizes: escrow 20.8 KB with via-IR, 19.3 KB without.
 ## Deployed on Arc testnet (test data, as of 2026-11-05)
 
 Circle CLI 1.2.3 takes arrays and tuples as JSON, so agents call these factories and their escrows directly, and
-`execute(bytes)` is gone. Escrows of the earlier factories stay on-chain, but the API no longer serves them.
+`execute(bytes)` is gone. Escrows of the earlier factories keep working through the API (`PREVIOUS_ESCROW_VERSIONS`).
 
 | What | Address |
 | --- | --- |
@@ -129,7 +129,7 @@ signs.
 The user deployed both factories with their own keystore ("Deploy on Arc mainnet" in the README): single-release
 from `single-release-v2` (block 29704232), multi-release from `multi-release-v2` (block 29704183). The code on-chain
 matches those builds, without `execute(bytes)`; only the immutable addresses differ. Escrows of the earlier factories
-stay on-chain, but the API no longer serves them.
+keep working through the API (`PREVIOUS_ESCROW_VERSIONS`).
 
 | What | Address |
 | --- | --- |
@@ -174,7 +174,9 @@ without via-IR on multi-release), and the API synced and green if an ABI changed
    - if a new error appears, map it in `src/domain/escrow/<kind>-contract-errors.ts` (a unit test fails
      until you do);
    - update the DTOs and use cases if a signature changed;
-   - run `npm test && npm run test:e2e`.
+   - run `npm test && npm run test:e2e`;
+   - if you deployed a new factory, follow "Move to a new factory" in that repo's `CLAUDE.md`, so the outgoing
+     version keeps being served.
 5. **In the backoffice** (`../Trustless-Work-Arc-Backoffice`), only if the API's wire shape changed: update
    `src/features/arc-api/types.ts` and the affected dialogs. `npm run local` in the API gives it a chain
    with the new contracts to click through.
