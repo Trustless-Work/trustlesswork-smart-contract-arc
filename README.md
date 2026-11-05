@@ -13,7 +13,6 @@ dispute flow, fee math and error names. The differences below come from moving t
 | --- | --- |
 | `src/SingleReleaseEscrow.sol` | Escrow logic. One EIP-1167 clone per escrow. |
 | `src/SingleReleaseEscrowFactory.sol` | Deploys and initializes clones atomically; holds the Trustless Work fee recipient. |
-| `src/utils/CalldataExecutor.sol` | `execute(bytes)`, inherited by the factory and the escrow: runs one of the contract's own functions from its ABI-encoded calldata. |
 | `src/interfaces/ISingleReleaseEscrow.sol` | Structs, errors and events (the Rust `storage/types.rs`, `error.rs`, `events/handler.rs`). |
 | `test/` | Unit and fuzz tests with a 6-decimal EIP-2612 mock of USDC. |
 | `test/fork/ArcFork.t.sol` | Checks against the real Arc testnet USDC. |
@@ -51,10 +50,6 @@ dispute flow, fee math and error names. The differences below come from moving t
   be zero, so these checks are new.
 - **Error surfacing.** `approveAndReleaseMilestones` bubbles up milestone errors as they are, instead of mapping
   them with `From<MilestoneError> for EscrowError`.
-- **`execute(bytes)`, an Arc-only addition.** The factory and the escrow accept the ABI-encoded call to any of their
-  own functions and run it with a delegatecall to themselves, so `msg.sender` and every check stay the same. It
-  exists because Circle CLI agent wallets (`circle wallet execute`, CLI 1.1.4) can pass `bytes` but cannot encode
-  array or tuple arguments. Soroban has no counterpart.
 
 ## Arc-specific notes
 

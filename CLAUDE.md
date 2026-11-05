@@ -62,9 +62,7 @@ transaction (no front-running window).
   `get_multiple_escrow_balances` moved to the factory.
 - **Deliberate deviations** (documented in each README): the fee recipient is fixed by the factory; the
   rounding remainder goes to the last recipient in array order; funding credits the balance delta;
-  zero-address checks; errors are not remapped; `execute(bytes)` on the factory and the escrow lets Circle CLI
-  agent wallets, which cannot encode array or tuple arguments, reach every function. On multi-release, two
-  Soroban rule gaps are closed:
+  zero-address checks; errors are not remapped. On multi-release, two Soroban rule gaps are closed:
   - update overlap checks run against the **stored** milestones;
   - new milestones cannot arrive disputed or resolved.
 
@@ -101,20 +99,24 @@ DELEGATECALL. Current sizes: escrow 20.8 KB with via-IR, 19.3 KB without.
 - **EVM target:** Arc runs Osaka; `foundry.toml` targets `prague`, a subset of it that includes the transient
   storage used by `ReentrancyGuardTransient`. `via_ir = true`, 200 optimizer runs, solc `0.8.30`.
 
-## Deployed on Arc testnet (test data, as of 2026-10-06)
+## Deployed on Arc testnet (test data, as of 2026-11-05)
 
-The factories with `execute(bytes)` are the current ones; the earlier ones lack it and do not work for Circle
-CLI agent wallets.
+Circle CLI 1.2.3 takes arrays and tuples as JSON, so agents call these factories and their escrows directly, and
+`execute(bytes)` is gone. Escrows of the earlier factories stay on-chain, but the API no longer serves them.
 
 | What | Address |
 | --- | --- |
-| Single-release factory with `execute(bytes)` (owner and fee recipient = test account A) | `0x829fE7040797Df140636901e79F1bA448B7e9ae0` |
-| Multi-release factory with `execute(bytes)` (owner and fee recipient = test account A; links the same library) | `0x7B04302DCEC430D74e8e38B35Cef96EbaD51b7fC` |
-| Earlier single-release factory, without `execute` | `0x4d819Dd3a6af9E0323102cf71E1D0FE29904F802` |
+| Single-release factory (owner and fee recipient = test account A) | `0xF7A03AceC7F3e68D2aa80964eeF176C0c86d1cD5` |
+| Single-release escrow implementation | `0x1bd004FdF28316E5626e8012E71C0f5Fb86681EC` |
+| Multi-release factory (owner and fee recipient = test account A; links the same library) | `0x1caDf6E6b15e4415B9A3161F26740ac2B25e57a5` |
+| Multi-release escrow implementation | `0xeE68B547c5Ba221CD565718236Bb585cc3b08dF0` |
+| Earlier single-release factory, with `execute(bytes)` | `0x829fE7040797Df140636901e79F1bA448B7e9ae0` |
+| Earlier multi-release factory, with `execute(bytes)` | `0x7B04302DCEC430D74e8e38B35Cef96EbaD51b7fC` |
+| First single-release factory | `0x4d819Dd3a6af9E0323102cf71E1D0FE29904F802` |
 | Single-release escrow `ENG-001` (released) | `0x35F4457491F7f9Dd7D2457483A751469675710B4` |
 | Single-release escrow `ENG-002` (approved, unfunded) | `0x9AE6A0668d8Fd9FDD6EDae30b7FA29B23489D800` |
-| Earlier multi-release factory, without `execute` (block 64850225) | `0x6CC61Bf5c4bd56290189265964b66A9b2CCD7458` |
-| Multi-release escrow implementation of the earlier factory | `0xBe6E5693FE6f5b27c218780e7773dFBd7ae6E6c8` |
+| First multi-release factory (block 64850225) | `0x6CC61Bf5c4bd56290189265964b66A9b2CCD7458` |
+| Multi-release escrow implementation of the first factory | `0xBe6E5693FE6f5b27c218780e7773dFBd7ae6E6c8` |
 | `MultiReleaseValidation` library (linked into the implementation) | `0x9487397A8A97C828AABFEA85291c85f1eAe36b91` |
 
 The user's test accounts: A `0x3025B4E63cdbBF2a12981fF38E7678C5a52e0D34` (admin, platform, funder),
@@ -122,18 +124,21 @@ B `0x40BC51511ad79166FCc3506bea745A928f7E2708` (approver, provider, release sign
 `0xE57f683F965de94c377Dc97E78E1A6d89e5531df` (dispute resolver). Never ask for or handle their keys; the user
 signs.
 
-## Deployed on Arc mainnet (2026-10-30)
+## Deployed on Arc mainnet (2026-11-05)
 
 The user deployed both factories with their own keystore ("Deploy on Arc mainnet" in the README): single-release
-from `single-release-v2` at `e8e9a70` (block 28625123), multi-release from `multi-release-v2` at `d64b619` (block
-28623756). The code on-chain matches those builds; only the immutable addresses differ.
+from `single-release-v2` (block 29704232), multi-release from `multi-release-v2` (block 29704183). The code on-chain
+matches those builds, without `execute(bytes)`; only the immutable addresses differ. Escrows of the earlier factories
+stay on-chain, but the API no longer serves them.
 
 | What | Address |
 | --- | --- |
-| Single-release factory (owner and fee recipient = test account A) | `0x6a65ebD7820604446898df89CeA284a46E9B621c` |
-| Single-release escrow implementation | `0xc04bfd01e08bE40419581b8587b347df4beC15E5` |
-| Multi-release factory (owner and fee recipient = test account A) | `0x69d4Fd89C4dCf43d2A08f4552eB15D66Cb9a6ab3` |
-| Multi-release escrow implementation | `0xd9733C7775f55F877Eb32d62dE90F90Ddc138E28` |
+| Single-release factory (owner and fee recipient = test account A) | `0x13DD756d6b94a03004D0c8d6fF429DFAbCe83A52` |
+| Single-release escrow implementation | `0xe21FBd6eEAA09C8f9D2D8B3cA2Af00F0850B4313` |
+| Multi-release factory (owner and fee recipient = test account A) | `0x09F65499DF04586b7a23C6f6e78e461CeA26D8Ad` |
+| Multi-release escrow implementation | `0xA56400fE44246d6708b16194ab25Fe3dB755827A` |
+| Earlier single-release factory (2026-10-30), with `execute(bytes)` | `0x6a65ebD7820604446898df89CeA284a46E9B621c` |
+| Earlier multi-release factory (2026-10-30), with `execute(bytes)` | `0x69d4Fd89C4dCf43d2A08f4552eB15D66Cb9a6ab3` |
 
 The owner can move the fee (`setTrustlessWorkFeeRecipient`) and hand a factory over in two steps
 (`transferOwnership`, then `acceptOwnership` from the new owner). Not verified on an explorer yet. Never deploy on
