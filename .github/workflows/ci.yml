@@ -1,0 +1,73 @@
+name: CI
+
+# Pull requests against any branch, and pushes to main and the release branches.
+# GitHub runs the workflow file that is committed on the branch being pushed, so
+# multi-release-v2 needs this same file before pushes there are checked.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - single-release-v2
+      - multi-release-v2
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  foundry:
+    name: fmt, build, test, size
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
+        with:
+          version: v1.9.0
+          # The action cache stores RPC responses. This suite does not fork, so cache
+          # the Solidity compiler and Forge build artifacts instead.
+          cache: false
+
+      - name: Show Forge version
+        run: forge --version
+
+      - name: Cache solc and build artifacts
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.local/share/svm
+            ~/.svm
+            cache
+            out
+          key: foundry-${{ runner.os }}-v1.9.0-${{ hashFiles('foundry.toml', 'foundry.lock', 'src/**/*.sol', 'test/**/*.sol', 'script/**/*.sol') }}
+          restore-keys: |
+            foundry-${{ runner.os }}-v1.9.0-
+
+      - name: Check formatting
+        run: forge fmt --check
+
+      - name: Build and check EIP-170 size
+        run: forge build --sizes
+
+      - name: Run tests
+        env:
+          # Fixed seed so a fuzz failure can be replayed. The run count stays at Forge's default.
+          FOUNDRY_FUZZ_SEED: "1"
+        run: forge test
+
+      - name: Check EIP-170 size without via-IR
+        # foundry.toml sets via_ir = true, which is the bytecode that ships.
+        # Remix builds without via-IR, and that bytecode also has to stay under the EIP-170 limit.
+        # A separate output directory keeps the configured artifacts in out/.
+        run: FOUNDRY_VIA_IR=false FOUNDRY_OUT=out-no-via-ir forge build --sizes
